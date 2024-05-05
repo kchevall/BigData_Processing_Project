@@ -1,0 +1,582 @@
+---
+title: "BigData with R project: Airbnb data analysis"
+output: html_document
+date: "2024-03-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+![Caption](banner_organisme.jpg)
+
+# Introduction
+This file contains all R codes used for general analysis of the Airbnb dataset for the "BigData programming with R" project at DSTI.
+
+More advanced analysis are featured on the Shiny apps, that have been regrouped in a flex dashboard (flex.Rmd).
+
+This project has been prepared by Ken Chevallier, student of A23 cohort in Applied MSc in Data Analytics curriculum.
+
+# 1. Prepare environment and load the data
+
+```{r}
+rm(list=ls())
+setwd("C:/DSTI_Courses/Big Data Processing with R/Project")
+load("AirBnB (1).Rdata")
+```
+
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(shiny)
+library(leaflet)
+library(stringr)
+library(tidyr)
+```
+
+
+# 2. Inspect data structure  
+
+```{r}
+summary(R)
+```
+> R is a dataframe containing the record of the dates of visits for every rental place.
+
+```{r}
+colnames(L)
+```
+
+> L is the dataframe containing the description features of all the rental places, including price, zipcode, neighborhood, address, and so on.\
+Let's already check data types of two of the most valuable columns, **price and date**, and convert them.
+
+```{r}
+# Check data types of price and date, and already convert them for appropriate use 
+class(L$price)
+class(R$date)
+
+# Convert price column to numeric
+L$price <- as.numeric(gsub("[$,]", "", L$price))
+# Convert the date column to Date
+R$date <- as.Date(R$date)
+```
+
+
+## Overview of the data  
+### We use table and summary functions to explore each column in the dataset.
+
+```{r}
+table(L$zipcode)
+```
+
+> There are several typos on zipcode. Most of them have no impact on the analysis (*price < $200*), except maybe for 2 (priced at $852 and $596, zipcodes 75 and adf), so we'll fix just theses ones (based on street info).\
+Also, one must know that actually, **16th district has 2 zipcodes: 75016 and 75116 !!!** So we'll change the 75116 values to reflect this.
+
+```{r}
+as.character(L$street[L$id == 3430844])
+as.character(L$street[L$id == 6091749])
+L$zipcode[L$id == 3430844] = 75012
+L$zipcode[L$id == 6091749] = 75003
+L$zipcode[L$zipcode == 75116] = 75016
+```
+
+
+
+# 3. Handling missing values
+
+
+```{r}
+colSums(is.na(L))
+```
+
+> There are a lot of missing values for the square_feet variable and reviews score.\
+But overall, there is not much work needed to handle the NA values, as thankfully, **the most important features (price, zipcode) have no missing value**, and we can still look at square_feet and reviews_score influence with the available information. 
+
+
+# 4. Explore Data distribution
+
+## Price distribution
+
+### Descriptive statistics for price
+
+There are several statistics to look at for price.
+
+```{r, eval=FALSE}
+# Central tendency and spread
+mean(L$price)      # mean
+median(L$price)    # mode
+quantile(L$price)  # quantile
+sd(L$price)        # standard deviation
+mad(L$price)       # median absolute deviation
+IQR(L$price)       # inter-quartile range
+# Summary
+summary(L$price)
+```
+> These will be analysed further in the "renting price per district" section.
+
+### Check data consistency on apartments which are the most expensive
+
+We will check some of the highest prices to make sure we don't have any unnecessary outliers.
+
+```{r}
+# Display the 10 most expensive apartments
+L %>%
+  pull(price) %>%
+  sort() %>%
+  tail(10)
+```
+
+> **Maximum value ($6081) is suspicious because it is really high.**
+In fact, there are 2 apartments which prices are most likely erroneous. We shall fix them.
+
+```{r}
+# Checking 2 suspicious prices
+as.character(L$listing_url[(L$price) == 6081])
+as.character(L$name[L$price == 3306])
+
+# Fixing these apartment prices
+L$price[L$price == 6081] <- 170
+L$price[L$price == 3306] <- 330
+```
+> The first one is still available at the same url <https://www.airbnb.com/rooms/11640000>, showing a price of 150€ per night, and the second one is only 75m2 square with standard accomodation, so it is also an error.
+
+
+
+## Surface area distribution
+
+
+```{r}
+boxplot(L$square_feet,col='lavender')
+```
+
+> There is a serious outlier in the square_feet variable. **15000 square feet is about 1400 square meters!**
+So it is clearly a wrong entry and it should be divided by 100 as it is a single bedroom as from description below.
+
+
+```{r}
+# Checking suspicious max value and replacing it
+as.character(L$access[!is.na(L$square_feet) & L$square_feet == max(L$square_feet, na.rm = TRUE)])
+
+# Fixing this entry
+L$square_feet[L$square_feet == max(L$square_feet, na.rm = TRUE)] <- 150
+```
+
+
+Other large apartments have been checked and seem appropriate.
+
+## Summary infos on many columns 
+
+> Several more columns were checked with summary function, and to ease the readability of the file, the output is not shown in HTML document, but the comments are displayed right below.
+
+```{r, eval=FALSE}
+# Getting some info on data columns
+
+cat("This is the summary of room type:\n")
+summary(L$room_type)
+
+cat("\nThis is the summary of experiences_offered:\n")
+summary(L$experiences_offered)
+
+cat("\nThis is the summary of bedrooms:\n")
+summary(L$bedrooms)
+
+cat("\nThis is the summary of market:\n")
+summary(L$market)
+
+cat("\nThis is the summary of country:\n")
+summary(L$country)
+
+cat("\nThis is the summary of is_location_exact:\n")
+summary(L$is_location_exact)
+
+cat("\nThis is the summary of property_type:\n")
+summary(L$property_type)
+
+cat("\nThis is the summary of accomodates:\n")
+summary(L$accomodates)
+
+cat("\nThis is the summary of review_scores_rating:\n")
+summary(L$review_scores_rating)
+
+cat("\nThis is the summary of host_is_superhost:\n")
+summary(L$host_is_superhost)
+
+```
+
+- Some observations from summaries above:
+  - Almost all the dataset concerns Apartments in Paris
+  - Some variables probably won't be useful (experiences offered, market)
+  - We can check relation between reviews and price
+  - There are very few superhosts, so we are currently not sure this variable will be useful.
+
+
+## Neighborhood columns study
+
+
+```{r, eval=FALSE}
+cat("\nThis is the summary of host_neighborhood:\n")
+head(table(L$host_neighbourhood),9)
+
+cat("\nThis is the summary of neighborhood:\n")
+head(table(L$neighbourhood),9)
+
+cat("\nThis is the summary of neighborhood_overview:\n")
+head(table(L$neighborhood_overview),3)
+
+cat("\nThis is the summary of neighbourhood_cleansed:\n")
+table(L$neighbourhood_cleansed)
+
+cat("\nThis is the summary of has_availability:\n")
+summary(L$has_availability)
+```
+
+
+```{r}
+pie(table(L$neighbourhood_cleansed))
+
+as.character(unique(L$zipcode[L$neighbourhood_cleansed == "Hôtel-de-Ville"]))
+```
+
+
+> The neighborhood_cleansed variable seems the most interesting one to study as it is well distributed.\
+But some values look suspicious, as we find too many zipcodes corresponding to each neighbouring.\
+So we will most likely not use this variable, and focus on the analysis with the zipcode variable.
+
+
+
+# 5. Analyze relationships
+
+
+## Renting price per district?
+
+```{r, include=FALSE}
+# For reference, calculate and plot max values using dplyr
+L %>%
+  filter(zipcode %in% c(75001:75020)) %>%
+  group_by(zipcode) %>%
+  summarize(max_price = max(price, na.rm = TRUE)) %>%
+  ggplot(aes(x = factor(zipcode), y = max_price)) +
+  theme_replace() +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(x = "Zip Code", y = "Max Price", title = "Max Prices by District")
+```
+
+### Average price
+
+```{r}
+# Calculate and plot mean values using dplyr
+L %>%
+  filter(zipcode %in% c(75001:75020)) %>%
+  group_by(zipcode) %>%
+  summarize(mean_price = mean(price, na.rm = TRUE)) %>%
+  ggplot(aes(x = factor(zipcode), y = mean_price)) +
+  theme_replace() +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(x = "Zip Code", y = "Mean Price", title = "Average Prices by District")
+```
+
+
+> As far as average price is concerned, **we see a significant difference between the first 8 districts of Paris and the rest.**\
+
+
+### Median price
+
+Let's also look at median price and median absolute deviation.
+Here we will choose to consider arranging the prices by the median and study the median absolute deviation as they are less influenced by outliers than the mean and standard deviations.
+
+```{r}
+# First, check overall price statistics in Paris
+L %>%
+  filter(zipcode %in% c(75001:75020)) %>%
+  summarise(median_price = median(price),
+            mad_price = mad(price),
+            iqr_price = IQR(price),
+            mean_price = mean(price),
+            sd_price = sd(price))
+```
+
+```{r}
+# Check median price and absolute deviations per district
+L %>%
+  filter(zipcode %in% c(75001:75020)) %>%
+  group_by(zipcode) %>%
+  summarise(median_price = median(price),
+            mad_price = mad(price),
+            iqr_price = IQR(price),
+            mean_price = mean(price),
+            sd_price = sd(price)) %>%
+  arrange(desc(median_price))
+```
+
+For the rest of analysis, notably for categorical graph faceting, we shall **choose 3 districts that represent well the distribution of prices in Paris.**
+Although 75008 has the highest mean and median price, it also has the highest deviations by far.
+So we will consider that **75001 is a better representative of the most expensive districts in Paris** (same median as 75006, but less absolute deviation and IQR).
+Then we will take **75015 as an average priced district** (same median as the median in whole Paris).
+And finally we will choose **75020 as the cheapest district as it has the lowest median**, absolute deviation and IQR in the group.\
+
+- In summary, the 3 representative districts are:
+  - **1st**
+  - **15th**
+  - **20th**
+
+```{r, include=FALSE}
+# These choices also reflect on the calculations based on neighborhood_cleansed.
+# Louvre, Vaugirard and Ménilmontant share the same place in that order.
+L %>%
+  group_by(neighbourhood_cleansed) %>%
+  summarise(median_price = median(price),
+            mad_price = mad(price),
+            iqr_price = IQR(price),
+            mean_price = mean(price),
+            sd_price = sd(price)) %>%
+  arrange(desc(median_price))
+```
+
+
+
+
+## Number of apartments per owner?
+
+Let's look at the hosts who own the most apartments.
+
+```{r}
+# Simple way to count, arrange and limit to 20 top owners.
+L %>%
+  count(host_id, host_name) %>%
+  arrange(desc(n)) %>%
+  slice_head(n = 20)
+```
+
+```{r, include=FALSE}
+# For reference, using group_by
+L %>%
+  group_by(host_id, host_name) %>%
+  summarize(nb_apart = n(), .groups = "drop") %>%
+  arrange(desc(nb_apart))
+```
+
+> We can further check the distribution of these hosts and the location of apartments in the Shiny app (see "Number apartments per owner" and "Map apartments per owner").
+
+## Relationship between prices and apartment features
+
+### Number of beds
+
+For the following plot, we filter on prices < 1000$ and beds <= 8 to exclude outliers, and we look at all districts.
+
+```{r}
+L %>%
+  filter(price < 1000 & beds <= 8 & zipcode %in% c(75001:75020), !is.na(beds)) %>%
+  ggplot() +
+  geom_boxplot(aes(x = factor(beds), y = price), fill = "lightcyan")
+```
+
+> As we expect, there is a constant increase in price according to the number of beds.\
+But **is this the same increase slope for all districts?** In particular, for the representative 1st, 15th and 20th? More study is available on Shiny app, see "Price and apartment features".
+
+
+```{r, include=FALSE}
+# Keep it for reference, but graph is not conclusive.
+L %>%
+  filter(zipcode %in% c(75001:75008), !is.na(bedrooms)) %>%
+  ggplot() +
+  geom_point(aes(x = bedrooms, y = price)) +
+  geom_smooth(aes(x = bedrooms, y = price),method='lm') +
+  facet_grid(room_type ~ zipcode)
+```
+### Reviews score influence on price
+
+```{r}
+L %>%
+  filter(!is.na(review_scores_rating)) %>%
+  ggplot() +
+  geom_point(aes(x = review_scores_rating, y = price, color = price)) +
+  scale_color_gradient(low = "lightgreen", high = "red") +
+  labs(color = "Price")
+```
+
+> We do see some indication that high priced apartments usually have good reviews (better than 80/100).\
+But this doesn't mean that low cost is bad! On the contrary, most ratings are good overall for all budgets.
+
+
+```{r, include=FALSE}
+# Keep it for reference, but not conclusive
+L %>%
+  filter(zipcode %in% c(75001:75008), !is.na(review_scores_rating)) %>%
+  ggplot() +
+  geom_point(aes(x = review_scores_rating, y = price, color = price)) +
+  scale_color_gradient(low = "lightgreen", high = "red") +
+  facet_wrap(~zipcode)
+```
+
+
+## Visit frequency of the different districts?
+
+### Number of visits
+
+```{r}
+# Heatmap of the visits on 1st district
+L %>%
+  select(id, zipcode) %>%
+  filter(zipcode == 75001) %>%
+  left_join(R, by = c("id" = "listing_id")) %>%
+  select(date) %>%
+  mutate(month = format(date, "%m"), year = format(date, "%Y")) %>%
+  filter(as.Date(date) <= as.Date("2016-06-30")) %>%
+  count(month, year) %>%
+  ggplot(aes(x = year, y = month, fill = n)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightgreen", high = "red") +
+  labs(title = "Number of visits by Month and Year for 75001",
+       x = "Year",
+       y = "Month",
+       fill = "Number of visits")
+```
+
+> It seems that the **visits were probably not well recorded until 2014** as there are too few visits prior to 2014.\
+So we will focus mostly on years 2014 to 2016 for the analysis on Shiny Apps (see "Number of visits per district" and "Frequency of visits per district").
+
+
+```{r, include=FALSE}
+# Scatter plot of the monthly visits on 1st district - see Shiny App
+L %>%
+  select(id, zipcode) %>%
+  filter(zipcode == 75001) %>%
+  left_join(R, by = c("id" = "listing_id")) %>%
+  select(date) %>%
+  mutate(month = format(date, "%m"), year = format(date, "%Y")) %>%
+  filter(as.Date(date) >= as.Date("2014-01-01") & 
+         as.Date(date) <= as.Date("2016-06-30")) %>%
+  count(month, year) %>%
+  ggplot() +
+  theme_replace() +
+  geom_point(aes(x = month, y = n, color = year)) +
+  labs(title = "Number of visits by Month and Year for 75001",
+       x = "Month",
+       color = "Year",
+       fill = "Number of visits")
+```
+
+
+
+### Visits in relation to the number of apartments for rent
+
+Previous plots were strictly showing absolute number of visits for a district.\
+But we need to take into account **the number of apartments that are available in the district** to estimate the frequency of visit.
+
+Let's then look at the number of visits in relation to the number of apartments available, to have a true comparison.
+
+
+```{r}
+R %>%
+  left_join(L, by = c("listing_id" = "id")) %>%
+  select(listing_id, zipcode, date) %>%
+  filter(zipcode %in% c(75001:75020)) %>%
+  mutate(month = format(date, "%m"), year = format(date, "%Y")) %>%
+  filter(as.Date(date) >= as.Date("2014-01-01") & 
+         as.Date(date) <= as.Date("2016-06-30")) %>% # The data stops at June 2016.
+  group_by(month, year, zipcode) %>%
+  summarise(visits_per_district = n(), .groups = "drop") %>%
+  left_join(L %>%
+              select(id, zipcode) %>%
+              group_by(zipcode) %>%
+              summarise(nb_apart_per_zipcode = n_distinct(id)),
+            by = "zipcode") %>%
+  mutate(visits_frequency = visits_per_district / nb_apart_per_zipcode) %>%
+  ggplot() +
+  theme_grey() +
+  geom_line(aes(x = as.Date(paste(year, month, "01", sep = "-")), y = visits_frequency, color = factor(zipcode))) +
+  labs(title = "Frequency of visits by Month and Year for Different Zipcodes",
+       x = "Date",
+       y = "Visits frequency",
+       color = "Zipcode") +
+  scale_color_discrete(name = "Zipcode") 
+```
+
+> It seems that there is an interesting pattern visible (the higher the district number, the lower the frequency visit).
+Let's confirm this with average values:
+
+```{r}
+# Average visit frequency of each district
+R %>%
+  left_join(L, by = c("listing_id" = "id")) %>%
+  select(listing_id, zipcode, date) %>%
+  filter(zipcode %in% c(75001:75020)) %>%
+  mutate(month = format(date, "%m"), year = format(date, "%Y")) %>%
+  group_by(month, year, zipcode) %>%
+  summarise(visits_per_district = n(), .groups = "drop") %>%
+  left_join(L %>%
+              select(id, zipcode) %>%
+              group_by(zipcode) %>%
+              summarise(nb_apart_per_zipcode = n_distinct(id)),
+            by = "zipcode") %>%
+  mutate(visits_frequency = visits_per_district / nb_apart_per_zipcode) %>%
+  group_by(zipcode) %>%
+  summarise(avg_freq = mean(visits_frequency)) %>%
+  arrange(desc(avg_freq))
+```
+
+> Interestingly enough, the districts from Paris which are the most frequently visited are very close to Paris center (4th, 2nd, 3rd, 6th and 1st districts).
+The frequency then decreases with the district number, **with the exception of 18th district** (more to see on this on Shiny apps).
+
+
+## Relation with proximity to famous monuments?
+
+We use a haversine formula to calculate the proximity to some famous monuments.
+
+```{r}
+# Function to calculate the distance between two points using the Haversine formula
+haversine_distance <- function(lon1, lat1, lon2, lat2) {
+  # Convert latitude and longitude from degrees to radians
+  lon1 <- lon1 * pi / 180
+  lat1 <- lat1 * pi / 180
+  lon2 <- lon2 * pi / 180
+  lat2 <- lat2 * pi / 180
+      
+  # Haversine formula
+  dlon <- lon2 - lon1
+  dlat <- lat2 - lat1
+  a <- sin(dlat / 2)^2 + cos(lat1) * cos(lat2) * sin(dlon / 2)^2
+  c <- 2 * asin(sqrt(a))
+  r <- 6371000  # Radius of the Earth in meters
+  
+  return(c * r)
+}
+```
+
+
+```{r}
+# Apartments located less than 100m away from Sacré Coeur
+L %>%
+  mutate(distance_to_monument = haversine_distance(longitude, latitude, 2.343103, 48.886709)) %>%
+  filter(distance_to_monument < 100) %>%
+  leaflet() %>%
+      addTiles() %>%
+      addPopups(lng = ~longitude, 
+                 lat = ~latitude,
+                 popup = ~paste("$", price))
+```
+
+
+> See **Shiny app "Proximity with monuments".**
+There is a definite impact on price when apartments are located near a famous monument like Eiffel Tower.
+However we do find some affordable apartments still in these neighborhoods.
+Overall, the neighborhood of Montmartre and Sacré Coeur seems to be the most attractive thanks to the reasonable prices and the quantity of apartments available.
+
+
+
+# Conclusion
+
+In conclusion, the dataset allowed us to capture some interesting insights.\
+The price of apartments, characteristics and visit frequency are highly correlated to their location (district), particularly to their distance from the center of Paris.\
+But there are also exceptions to this general rule, and it appears that one could definitely recommend considering 18th district, to allow for a nice affordable stay in Paris while visiting a very pleasant side of Paris.
+
+
+
+![Caption](montmartre.jpg)
+
+

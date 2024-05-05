@@ -1,0 +1,918 @@
+---
+title: "BigData project"
+output: flexdashboard::flex_dashboard
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+
+library(ggplot2)
+library(dplyr)
+library(shiny)
+library(leaflet)
+library(stringr)
+library(tidyr)
+```
+
+
+```{r}
+# Load the data and apply necessary transformations
+load("AirBnB (1).Rdata")
+
+# Convert price column to numeric in L dataframe
+L$price <- as.numeric(gsub("[$,]", "", L$price))
+
+# Convert the date column in R dataframe
+R$date <- as.Date(R$date)
+```
+
+
+
+# Renting price per district
+
+```{r}
+shinyApp(
+  
+# Define UI for app that draws a histogram ----
+ui <- fluidPage(
+  
+  # Set CSS styles for the body element
+  tags$head(
+    tags$style(
+      HTML(
+        "
+        body {
+          background-color: #eaf4fc; /* Light blue background color */
+        }
+        "
+      )
+    )
+  ),
+  
+  # App title ----
+  titlePanel("Renting price per district"),
+
+  # Sidebar layout with input and output definitions ----
+  sidebarLayout(
+    
+    # Main panel for displaying outputs ----
+    mainPanel(
+      # Output: Boxplot ----
+      plotOutput(outputId = "boxPlot", height = "650px"),
+      
+      # Add space between the plot and comments
+      br(),br(),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 25px;",
+        HTML("<p style='font-weight: bold; color: #333;'>Based on median and median absolute deviation, We can categorize districts in 3 groups: the high cost (districts 1 to 8, and 16), the average cost (9,10,11,14,15,17) and the lower cost (12,13,18,19,20).</p>")
+      )
+    ),
+
+
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+      selectInput(inputId = "zipcode1",
+                  label = "High cost districts",
+                  choices = c(75001:75008,75016),
+                  selected = 75001),
+      selectInput(inputId = "zipcode2",
+                  label = "Average cost districts",
+                  choices = c(75009:75011,75014,75015,75017),
+                  selected = 75015),
+      selectInput(inputId = "zipcode3",
+                  label = "Low cost districts",
+                  choices = c(75012,75013,75018:75020),
+                  selected = 75020),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 18px;",
+        HTML("<p style='font-style: italic; color: #333;'>Choose district among 3 categories of price</p>")
+      )
+      
+    )
+  )),
+
+
+# Define server logic required to draw a histogram ----
+server <- function(input, output) {
+  output$boxPlot <- renderPlot({
+
+    # Define the order of zip codes
+    zip_order <- c(input$zipcode1, input$zipcode2, input$zipcode3)
+    
+    L %>%
+      select(zipcode, price) %>%
+      filter(zipcode %in% c(input$zipcode1,input$zipcode2,input$zipcode3) & price < 500) %>%
+      ggplot() +
+      theme_replace() +
+      geom_boxplot(aes(x = factor(zipcode, levels = zip_order), y = price), fill = 'lavender')
+
+  })
+
+  
+}
+
+
+)
+```
+
+
+
+
+# Price distribution per district
+
+
+
+```{r}
+shinyApp(
+ui <- fluidPage(
+  
+  # Set CSS styles for the body element
+  tags$head(
+    tags$style(
+      HTML(
+        "
+        body {
+          background-color: #eaf4fc; /* Light blue background color */
+        }
+        "
+      )
+    )
+  ),
+  
+  # App title ----
+  titlePanel("Price distribution per district"),
+  
+  # Sidebar layout with input and output definitions ----
+  sidebarLayout(
+    
+    # Main panel for displaying outputs ----
+    mainPanel(
+      
+      # Output: Histogram ----
+      plotOutput(outputId = "distPlot", height = "650px"),
+      
+      # Add space between the plot and comments
+      br(),br(),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 25px;",
+        HTML("<p style='font-weight: bold; color: #333;'>We can notice that the higher the price category, the wider the price distribution is. The most expensive districts are 8th, 1st, and 6th, while the cheapest are 13th, 19th, and 20th.</p>")
+      )
+    ),
+    
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+      selectInput(inputId = "zipcode1",
+                  label = "High cost districts",
+                  choices = c(75001:75008,75016),
+                  selected = 75001),
+      selectInput(inputId = "zipcode2",
+                  label = "Average cost districts",
+                  choices = c(75009:75011,75014,75015,75017),
+                  selected = 75015),
+      selectInput(inputId = "zipcode3",
+                  label = "Low cost districts",
+                  choices = c(75012,75013,75018:75020),
+                  selected = 75020),
+      checkboxInput(inputId = "avg",
+                    label = "Average price",
+                    value = FALSE),
+      
+
+      # Comments
+      div(
+        style = "text-align: center; font-size: 18px;",
+        HTML("<p style='font-style: italic; color: #333;'>Click on average price to see the average prices of apartments for each district.</p>")
+      )
+      
+    )
+  )),
+
+
+# Define server logic required to draw a histogram ----
+server <- function(input, output) {
+  output$distPlot <- renderPlot({
+    
+    hist1 <- L %>%
+      select(price, zipcode) %>%
+      filter(zipcode == input$zipcode1 & price < 500) %>%
+      ggplot() + 
+      theme_replace() +
+      geom_histogram(aes(x = price, y = after_stat(density)), bins = 50, fill='lightgreen', color='black') +
+      geom_density(aes(x=price),col='firebrick',linewidth=1.5) +
+      ggtitle(paste("Histogram of", input$zipcode1))
+
+    hist2 <- L %>%
+      select(price, zipcode) %>%
+      filter(zipcode == input$zipcode2 & price < 500) %>%
+      ggplot() + 
+      theme_replace() +
+      geom_histogram(aes(x = price, y = after_stat(density)), bins = 50, fill='lightgreen', color='black') +
+      geom_density(aes(x=price),col='firebrick',linewidth=1.5) +
+      ggtitle(paste("Histogram of", input$zipcode2))
+
+    hist3 <- L %>%
+      select(price, zipcode) %>%
+      filter(zipcode == input$zipcode3 & price < 500) %>%
+      ggplot() + 
+      theme_replace() +
+      geom_histogram(aes(x = price, y = after_stat(density)), bins = 50, fill='lightgreen', color='black') +
+      geom_density(aes(x=price),col='firebrick',linewidth=1.5) +
+      ggtitle(paste("Histogram of", input$zipcode3))
+
+    # Add average price if checkbox is checked
+    if (input$avg) {
+
+      # Determine the maximum density value
+      max_density1 <- max(hist1$data$y)
+      max_density2 <- max(hist2$data$y)
+      max_density3 <- max(hist3$data$y)
+      
+      avg_price1 <- mean(L$price[L$zipcode == input$zipcode1])
+      hist1 <- hist1 +
+        geom_vline(xintercept = avg_price1, col = "royalblue", lwd = 1.5) +
+        geom_text(aes(x = avg_price1, y = max_density1 + 0.02, label = paste("Avg Price: $", round(avg_price1, 2))), 
+                  vjust = -15.0, hjust = -0.5, col = "royalblue", size = 4)
+      
+      avg_price2 <- mean(L$price[L$zipcode == input$zipcode2])
+      hist2 <- hist2 +
+        geom_vline(xintercept = avg_price2, col = "royalblue", lwd = 1.5) +
+        geom_text(aes(x = avg_price2, y = max_density2 + 0.02, label = paste("Avg Price: $", round(avg_price2, 2))), 
+                  vjust = -15.0, hjust = -0.5, col = "royalblue", size = 4)
+      
+      avg_price3 <- mean(L$price[L$zipcode == input$zipcode3])
+      hist3 <- hist3 +
+        geom_vline(xintercept = avg_price3, col = "royalblue", lwd = 1.5) +
+        geom_text(aes(x = avg_price3, y = max_density3 + 0.02, label = paste("Avg Price: $", round(avg_price3, 2))), 
+                  vjust = -15.0, hjust = -0.5, col = "royalblue", size = 4)
+    }
+    
+    
+    # Combine histograms into a single plot
+    combined_plot <- gridExtra::grid.arrange(hist1, hist2, hist3, ncol = 1)
+    
+    # Print the combined plot
+    print(combined_plot)
+
+  })
+  
+}
+
+)
+```
+
+
+# Number of apartments per owner
+
+```{r}
+shinyApp(
+# Define UI for app that draws a histogram
+ui <- fluidPage(
+  
+  # Set CSS styles for the body element
+  tags$head(
+    tags$style(
+      HTML(
+        "
+        body {
+          background-color: #eaf4fc; /* Light blue background color */
+        }
+        "
+      )
+    )
+  ),
+  
+  # App title ----
+  titlePanel("Hosts owning the most apartments"),
+  
+  # Sidebar layout with input and output definitions
+  sidebarLayout(
+    
+    # Main panel for displaying outputs
+    mainPanel(
+      
+      # Output: Histogram ----
+      plotOutput(outputId = "distPlot", height = "650px"),
+
+      # Add space between the plot and comments
+      br(),br(),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 25px;",
+        HTML("<p style='font-weight: bold; color: #333;'>This histogram provides interesting information to evaluate the market for a new host or agency. 
+             Indeed with this graph we can check how many hosts own 2, 3 or more apartments.</p>")
+      )
+      
+
+    ),
+    
+    # Sidebar panel for inputs
+    sidebarPanel(
+      numericInput(inputId = "nbowners",
+                   label = "Number of owners",
+                   value = 50, # by default, 50 owners
+                   min = 1,
+                   max = 45000, # there are 45k different hosts
+                   step = 1),
+      verbatimTextOutput("input_error"),
+
+      # Comments
+      div(
+        style = "text-align: center; font-size: 18px;",
+        HTML("<p style='font-style: italic; color: #333;'>Enter the number of hosts to be displayed. The selection is filtered on hosts who own the most apartments. Then the histogram shows the distribution of hosts according to the number of apartments.
+             For example, with the default selection of 50 hosts, we see the 50 hosts who own the most apartments, including 1 host with 155 apartments, 1 host with 139 apartments, etc. 
+             There are about 45.000 hosts in the dataset, and obviously a large majority are hosts of only 1 apartment. But will you find how many hosts have at least 2 apartments? Hint: it is about 7.3% of all hosts.</p>")
+      )
+      
+      
+    )
+  )),
+
+
+# Define server logic required to draw a map 
+server <- function(input, output) {
+  output$distPlot <- renderPlot({
+    
+    hist <- L %>%
+      count(host_id)  %>%
+      arrange(desc(n)) %>%
+      slice_head(n = as.numeric(input$nbowners)) %>%
+      ggplot() +
+      theme_replace() +
+      geom_histogram(aes(x = n), bins = 60, fill='lightgreen', color='black') +
+      scale_x_continuous(breaks = seq(0, 155, by = 5)) +
+      labs(x = "Number of apartments owned", y = "Number of hosts")
+    
+      print(hist)
+  })
+  
+  output$input_error <- renderText({
+    if (input$nbowners < 1 || input$nbowners > 45000) {
+      "Error: Please enter a value between 1 and 45,000."
+    } else {
+      ""
+    }
+  })
+}
+  
+)
+```
+
+
+
+
+# Map apartments per owner
+
+
+```{r}
+# Create a named vector with host names, host IDs, and apartment counts for the top 100 hosts
+host_choices <- L %>%
+  count(host_id, host_name) %>%
+  arrange(desc(n)) %>%
+  slice_head(n = 100) %>%
+  select(host_id, host_name, n_apartments = n) %>%
+  with(setNames(host_id, paste(host_name, "(", n_apartments, "apartments)", sep = " ")))
+
+shinyApp(
+  
+ui <- fluidPage(
+  
+  # Set CSS styles for the body element
+  tags$head(
+    tags$style(
+      HTML(
+        "
+        body {
+          background-color: #eaf4fc; /* Light blue background color */
+        }
+        "
+      )
+    )
+  ),
+  
+  # App title ----
+  titlePanel("Apartments owned by host"),
+  
+  # Sidebar layout with input and output definitions
+  sidebarLayout(
+    
+    # Main panel for displaying outputs
+    mainPanel(
+      
+      # Output: Leaflet
+      leafletOutput(outputId = "map", height = "650px"),
+      
+      # Add space between the plot and comments
+      br(),br(),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 25px;",
+        HTML("<p style='font-weight: bold; color: #333;'>We limit the search to the top 100 hosts who own the most apartments, and we can see they all have more than 10 apartments, geographically well spread over Paris and with various price offerings too.</p>")
+      )
+      
+    ),
+
+    # Sidebar panel for inputs
+    sidebarPanel(
+      selectInput(inputId = "ownerId",
+                  label = "Host name",
+                  choices = host_choices,
+                  selected = 2288803), # By default, the one with the most apartments
+      checkboxInput(inputId = "price",
+                    label = "Price (1 night)",
+                    value = FALSE),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 18px;",
+        HTML("<p style='font-style: italic; color: #333;'>Click on price to see the prices of each apartment</p>")
+      )
+      
+    )
+  )),
+
+
+# Define server logic required to draw a map 
+server <- function(input, output) {
+  output$map <- renderLeaflet({
+    
+    # Retrieve the coordinates for the owner's apartments
+    coord_df <- data.frame(lon = L$longitude[L$host_id == input$ownerId],
+                          lat = L$latitude[L$host_id == input$ownerId])
+
+    # Create a leaflet object
+    map <- leaflet() %>%
+      addTiles() %>%
+      addMarkers(lng = coord_df$lon, lat = coord_df$lat)
+    
+    # Add popups with prices if checkbox is checked
+    if (input$price) {
+      for (i in seq_len(nrow(coord_df))) {
+        #popup <- paste("$", L$price[L$host_id == input$ownerId][i])
+        map <- map %>%
+          addPopups(lng = coord_df$lon[i], 
+                    lat = coord_df$lat[i], 
+                    popup = paste("$", L$price[L$host_id == input$ownerId][i]))
+      }
+    }
+    
+    # Return the leaflet object
+    map
+        
+})
+  
+}
+           
+)
+```
+
+
+
+
+# Price and apartment features
+
+```{r}
+shinyApp(
+
+ui <- fluidPage(
+  
+  # Set CSS styles for the body element
+  tags$head(
+    tags$style(
+      HTML(
+        "
+        body {
+          background-color: #eaf4fc; /* Light blue background color */
+        }
+        "
+      )
+    )
+  ),
+  
+  # App title ----
+  titlePanel("Price according to apartment features"),
+  
+  # Sidebar layout with input and output definitions ----
+  sidebarLayout(
+    
+    # Main panel for displaying outputs ----
+    mainPanel(
+      
+      # Output: Histogram ----
+      plotOutput(outputId = "distPlot", height = "650px"),
+      
+      # Add space between the plot and comments
+      br(),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 25px;",
+        HTML("<p style='font-style: italic; font-weight: bold; color: #333;'>The higher the price category, the steeper the curve when adding more features (beds, bedrooms, bathrooms) to an apartment. Interestingly enough, the surface area (squared_feet) influence is similar for all districts. The host response information, however, seems to have no correlation with the price. 
+  Finally, the impact of good reviews on price is higher on the high priced districts.</p>")
+      )
+      
+    ),
+    
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+      selectInput(inputId = "feature",
+                  label = "Apartment feature",
+                  choices = c("beds","bedrooms","bathrooms","square_feet",
+                              "host_response_rate","host_response_time",
+                              "host_listings_count","review_scores_rating"),
+                  selected = "beds"),      
+
+      # Comments
+      div(
+        style = "text-align: center; font-size: 18px;",
+        HTML("<p style='font-style: italic; color: #333;'>Select a feature to evaluate its impact on price, on our 3 representative districts (1st, 15th, 20th)</p>")
+      )
+
+    )
+  )),
+
+
+# Define server logic required to draw a histogram ----
+server <- function(input, output) {
+  output$distPlot <- renderPlot({
+    
+  L %>%
+    # Limit the number of beds, bedrooms and bathrooms to remove unnecessary outliers
+    filter(price < 1000 & beds <= 8 & bedrooms <= 4 & bathrooms <= 3 & zipcode %in% c(75001,75015,75020) & !is.na(input$feature)) %>%
+    ggplot() +
+    geom_point(aes_string(x = input$feature, y = "price", color = "price")) +
+    geom_smooth(aes_string(x = input$feature, y = "price"),method='lm') +
+    scale_color_gradient(low = "lightgreen", high = "red") +
+    labs(color = "Price") +
+    facet_wrap(~zipcode)
+    
+  })  
+  
+}  
+
+      
+)
+```
+
+
+
+
+# Number of visits per district
+
+
+```{r}
+shinyApp(
+
+# Define UI for app ----
+ui <- fluidPage(
+  
+  # Set CSS styles for the body element
+  tags$head(
+    tags$style(
+      HTML(
+        "
+        body {
+          background-color: #eaf4fc; /* Light blue background color */
+        }
+        "
+      )
+    )
+  ),
+  
+  # App title ----
+  titlePanel("Number of visits from 2014 to 2016"),
+  
+  # Sidebar layout with input and output definitions ----
+  sidebarLayout(
+    
+    # Main panel for displaying outputs ----
+    mainPanel(
+      
+      # Output: Heatmap ----
+      plotOutput(outputId = "heatmap", height = "350px"),
+      
+      # Output: Scatterplot ----
+      plotOutput(outputId = "scatterplot", height = "350px"),
+      
+      # Add space between the plot and comments
+      br(),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 25px;",
+        HTML("<p style='font-weight: bold; color: #333;'>
+             We notice an interesting pattern every year for every district, which is that the visits increase from January to June/July, then have a drop in July/August, to increase again to the busiest months, September and October.</p>")
+      )
+      
+    ),
+    
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+      selectInput(inputId = "zipcode",
+                  label = "Paris district",
+                  choices = c(75001:75020),
+                  selected = 75001),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 18px;",
+        HTML("<p style='font-style: italic; color: #333;'>You can choose the district to display, but the pattern is very much the same with all districts.
+             These graphs show that the number of visits has increased over time in the dataset, which, given the big difference in numbers, could just reflect the fact that less visits were recorded in the prior years.</p>")
+      )
+    )
+  )),
+
+
+# Define server logic required to draw the heatmap ----
+server <- function(input, output) {
+  output$heatmap <- renderPlot({
+    
+    L %>%
+      select(id, zipcode) %>%
+      filter(zipcode == input$zipcode) %>%
+      left_join(R, by = c("id" = "listing_id")) %>%
+      select(date) %>%
+      mutate(month = format(date, "%m"), year = format(date, "%Y")) %>%
+      filter(as.Date(date) >= as.Date("2014-01-01") & 
+             as.Date(date) <= as.Date("2016-06-30")) %>%
+      count(month, year) %>%
+      ggplot(aes(x = year, y = month, fill = n)) +
+      geom_tile(color = "white") +
+      scale_fill_gradient(low = "lightgreen", high = "red") +
+      labs(x = "Year",
+           y = "Month",
+           fill = "Number of visits")
+    
+  })  
+
+  output$scatterplot <- renderPlot({
+  
+    L %>%
+      select(id, zipcode) %>%
+      filter(zipcode == input$zipcode) %>%
+      left_join(R, by = c("id" = "listing_id")) %>%
+      select(date) %>%
+      mutate(month = format(date, "%m"), year = format(date, "%Y")) %>%
+      filter(as.Date(date) >= as.Date("2014-01-01") & 
+               as.Date(date) <= as.Date("2016-06-30")) %>%
+      count(month, year) %>%
+      ggplot() +
+      theme_replace() +
+      geom_point(aes(x = month, y = n, color = year)) +
+      labs(x = "Month",
+           color = "Year",
+           fill = "Number of visits")
+
+  })
+  
+}
+
+      
+)
+```
+
+
+# Frequency of visits per district
+
+
+
+```{r}
+shinyApp(
+
+# Define UI for app ----
+ui <- fluidPage(
+  
+  # Set CSS styles for the body element
+  tags$head(
+    tags$style(
+      HTML(
+        "
+        body {
+          background-color: #eaf4fc; /* Light blue background color */
+        }
+        "
+      )
+    )
+  ),
+  
+  # App title ----
+  titlePanel("Frequency of visits per district"),
+  
+  # Sidebar layout with input and output definitions ----
+  sidebarLayout(
+    
+    # Main panel for displaying outputs ----
+    mainPanel(
+      
+      # Output: LinePlot ----
+      plotOutput(outputId = "linePlot", height = "600px"),
+      
+      # Add space between the plot and comments
+      br(),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 25px;",
+        HTML("<p style='font-weight: bold; color: #333;'>The frequency of visits tends to decrease with the distance to Paris center.
+        Notably, the most frequently visited districts are the 4th, 2nd and 3rd, while the least visited are the 17th, 19th and 20th.
+However, one district seems to have its own charm or appeal: indeed, the 18th district (low cost) is visited as frequently as the 8th (the highest priced), and even much more visited than the 16th (also high cost)."
+        )
+      )
+
+    ),
+    
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+      selectInput(inputId = "zipcode1",
+                  label = "Paris district",
+                  choices = c(75001:75020),
+                  selected = 75001),
+      selectInput(inputId = "zipcode2",
+                  label = "Paris district",
+                  choices = c(75001:75020),
+                  selected = 75015),
+      selectInput(inputId = "zipcode3",
+                  label = "Paris district",
+                  choices = c(75001:75020),
+                  selected = 75020),
+      # Comments
+      div(
+        style = "text-align: center; font-size: 18px;",
+        HTML("<p style='font-style: italic; color: #333;'>Choose the districts to compare. The frequency of visits is the number of visits relative to the number of apartments that are for rent on the district. Note: 18th district is interesting to compare with other districts (8th, 16th).</p>")
+      )
+    )
+  )),
+
+
+# Define server logic required to draw the lineplot ----
+server <- function(input, output) {
+  output$linePlot <- renderPlot({
+    
+      R %>%
+      left_join(L, by = c("listing_id" = "id")) %>%
+      select(listing_id, zipcode, date) %>%
+      filter(zipcode %in% c(input$zipcode1,input$zipcode2,input$zipcode3)) %>%
+      mutate(month = format(date, "%m"), year = format(date, "%Y")) %>%
+      filter(as.Date(date) >= as.Date("2014-01-01") & 
+             as.Date(date) <= as.Date("2016-06-30")) %>%
+      group_by(month, year, zipcode) %>%
+      summarise(visits_per_district = n(), .groups = "drop") %>%
+      left_join(L %>%
+                  select(id, zipcode) %>%
+                  group_by(zipcode) %>%
+                  summarise(nb_apart_per_zipcode = n_distinct(id)),
+                by = "zipcode") %>%
+      mutate(visits_frequency = visits_per_district / nb_apart_per_zipcode) %>%
+      ggplot() +
+      theme_grey() +
+      geom_line(aes(x = as.Date(paste(year, month, "01", sep = "-")), y = visits_frequency, color = factor(zipcode))) +
+      labs(x = "Date",
+           y = "Visits frequency",
+           color = "Zipcode") +
+      scale_color_discrete(name = "Zipcode") 
+    
+  })  
+
+}
+
+      
+)
+```
+
+
+
+# Proximity to monuments
+
+
+```{r}
+shinyApp(
+
+ui <- fluidPage(
+  
+  # Set CSS styles for the body element
+  tags$head(
+    tags$style(
+      HTML(
+        "
+        body {
+          background-color: #eaf4fc; /* Light blue background color */
+        }
+        "
+      )
+    )
+  ),
+  
+  # App title ----
+  titlePanel("Apartments near monuments"),
+  
+  # Sidebar layout with input and output definitions ----
+  sidebarLayout(
+    
+    # Main panel for displaying outputs ----
+    mainPanel(
+      
+      # Output: Leaflet map ----
+      leafletOutput(outputId = "map", height = "600px"),
+      
+      # Add space between the plot and comments
+      br(),br(),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 25px;",
+        HTML("<p style='font-weight: bold; color: #333;'>The density of apartments is very high near Notre-Dame and the Basilique of Sacré Coeur compared to other main monuments. But the more affordable prices of the apartments near Sacré Coeur make it a more attractive neighborhood. Overall, the 18th district, with Montmartre and Sacré Coeur seems like a very reasonable choice for a trip in Paris."
+        )
+      )
+      
+    ),
+    
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+      selectInput(inputId = "monument",
+                  label = "Paris monument",
+                  choices = c("Eiffer tower","Arc de Triomphe","Louvre museum","Notre-Dame","Sacré-Coeur"),
+                  selected = "Eiffel tower"),
+      
+      # Comments
+      div(
+        style = "text-align: center; font-size: 18px;",
+        HTML("<p style='font-style: italic; color: #333;'>Choose the monument to display and the apartments located less than 200 meters away with their price.</p>")
+      )
+    )
+  )),
+
+
+# Define server logic required to draw a histogram ----
+server <- function(input, output) {
+  output$map <- renderLeaflet({
+    
+    monument_longitude <- 2.294481  # longitude of the Eiffel Tower
+    monument_latitude <- 48.858370  # latitude of the Eiffel Tower
+    
+    if(input$monument == "Arc de Triomphe"){
+      monument_longitude <- 2.295028  # longitude of the Arc de Triomphe
+      monument_latitude <- 48.873792  # latitude of the Arc de Triomphe
+    }
+    else if(input$monument == "Louvre museum"){
+      monument_longitude <- 2.337644  # longitude of the Louvre museum
+      monument_latitude <- 48.860611  # latitude of the Louvre museum
+    }
+    else if(input$monument == "Notre-Dame"){
+      monument_longitude <- 2.349902  # longitude of Notre-Dame
+      monument_latitude <- 48.852968  # latitude of Notre-Dame
+    }
+    else if(input$monument == "Sacré-Coeur"){
+      monument_longitude <- 2.343103  # longitude of the Sacré-Coeur
+      monument_latitude <- 48.886709  # latitude of the Sacré-Coeur
+    }
+    
+    # Function to calculate the distance between two points using the Haversine formula
+    haversine_distance <- function(lon1, lat1, lon2, lat2) {
+      # Convert latitude and longitude from degrees to radians
+      lon1 <- lon1 * pi / 180
+      lat1 <- lat1 * pi / 180
+      lon2 <- lon2 * pi / 180
+      lat2 <- lat2 * pi / 180
+      
+      # Haversine formula
+      dlon <- lon2 - lon1
+      dlat <- lat2 - lat1
+      a <- sin(dlat / 2)^2 + cos(lat1) * cos(lat2) * sin(dlon / 2)^2
+      c <- 2 * asin(sqrt(a))
+      r <- 6371000  # Radius of the Earth in meters
+      
+      return(c * r)
+    }
+    
+    # Calculate distance between each apartment and the monument
+    L$distance_to_monument <- haversine_distance(L$longitude, L$latitude, monument_longitude, monument_latitude)
+    
+    # Filter apartments within 150 meters of the monument
+    apartments_near_monument <- L[L$distance_to_monument < 200, ]
+
+    # Create a leaflet object
+    map <- leaflet() %>%
+      addTiles() %>%
+      addPopups(lng = apartments_near_monument$longitude, 
+                 lat = apartments_near_monument$latitude,
+                 popup = paste("$", apartments_near_monument$price))
+    
+    # Return the leaflet object
+    map
+  })
+ 
+}
+      
+)
+```
+
+
+
